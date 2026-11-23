@@ -202,7 +202,7 @@ export const SEED_TUTORIALS: Tutorial[] = [
     id: 'wifi',
     title: 'Conectar no Wi-Fi',
     description: 'Ligue o celular na internet de casa para economizar dados.',
-    emoji: '📶',
+    emoji: '🛜',
     category: 'Internet',
     difficulty: 'medio',
     targetApp: APPS.configuracoes,

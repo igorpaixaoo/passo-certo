@@ -44,16 +44,15 @@ export default function Home() {
           <AppText variant="title">Passo Certo</AppText>
         </View>
         <Button
-          label="Aa Ajustes"
+          label="Ajustes ⚙️"
           variant="ghost"
           compact
           accessibilityHint="Mudar tamanho da letra, cores e voz"
           onPress={() => router.push('/ajustes')}
         />
       </View>
-
-      <View style={{ gap: 4 }}>
-        <AppText variant="hero">Olá! 👋</AppText>
+      <View style={{ gap: 4, marginTop: 15 }}>
+        <AppText variant="hero">Olá!</AppText>
         <AppText variant="large" muted>
           O que você quer aprender hoje? Escolha um tutorial e eu te guio passo a passo.
         </AppText>

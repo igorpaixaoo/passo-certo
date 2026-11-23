@@ -26,6 +26,16 @@
     "plugins": [
       "expo-router"
     ],
-    "scheme": "passocerto"
+    "scheme": "passocerto",
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "75a73231-f0f3-488c-88de-960a2412f3e4"
+      }
+    }
   }
 }

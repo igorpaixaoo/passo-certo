@@ -18,7 +18,7 @@ export interface Settings {
 const DEFAULT_SETTINGS: Settings = {
   themeMode: 'sistema',
   colorVision: 'normal',
-  textScale: 1.2,
+  textScale: 1,
   voiceEnabled: true,
   speechRate: 0.85,
 };
