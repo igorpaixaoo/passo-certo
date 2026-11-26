@@ -37,9 +37,9 @@ import kotlin.math.roundToInt
 /**
  * Serviço que desenha a caixa flutuante do tutorial por cima de qualquer app.
  *
- * Estados da janela:
- *  - cartão expandido (passo atual, botões grandes, voz)
- *  - bolinha minimizada (arrastável, toque para abrir de novo)
+ * Estados da janela (todos arrastáveis com o dedo):
+ *  - cartão compacto (passo atual, botões, voz)
+ *  - bolinha minimizada (toque para abrir de novo)
  *  - cartão de conclusão ("Parabéns!")
  */
 class OverlayService : Service(), TextToSpeech.OnInitListener {
@@ -75,10 +75,13 @@ class OverlayService : Service(), TextToSpeech.OnInitListener {
   // Estado da interface
   private var minimized = false
   private var finished = false
-  private var atTop = false
   private var exitArmed = false
+
+  // Posições (canto superior esquerdo, em pixels) — mantidas entre os passos.
   private var bubbleX = 0
   private var bubbleY = 0
+  private var cardX = 0
+  private var cardY = 0
 
   // Preferências
   private var voiceEnabled = true
@@ -102,8 +105,11 @@ class OverlayService : Service(), TextToSpeech.OnInitListener {
     windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
     tts = TextToSpeech(this, this)
     val metrics = resources.displayMetrics
-    bubbleX = metrics.widthPixels - dp(88)
+    bubbleX = metrics.widthPixels - dp(80)
     bubbleY = metrics.heightPixels / 2
+    cardX = 0
+    // Começa na parte de baixo; render() corrige se a caixa não couber.
+    cardY = metrics.heightPixels
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -151,7 +157,7 @@ class OverlayService : Service(), TextToSpeech.OnInitListener {
     speechRate = obj.optDouble("speechRate", 0.85).toFloat()
     // Escala mais suave que no app: a caixa precisa caber na tela.
     val appScale = obj.optDouble("textScale", 1.0).toFloat()
-    scale = 1f + (appScale - 1f) * 0.6f
+    scale = 1f + (appScale - 1f) * 0.5f
 
     val arr = obj.getJSONArray("steps")
     steps = (0 until arr.length()).map { i ->
@@ -291,6 +297,12 @@ class OverlayService : Service(), TextToSpeech.OnInitListener {
     try {
       windowManager.addView(view, layoutParams())
       currentView = view
+      // Depois de medir, garante que a janela inteira está dentro da tela.
+      view.post {
+        if (currentView === view) {
+          (view.layoutParams as? WindowManager.LayoutParams)?.let { moveWindow(it.x, it.y) }
+        }
+      }
     } catch (e: Exception) {
       // Sem permissão de sobreposição: encerra sem travar o app.
       listener?.invoke("cancel", index, steps.size)
@@ -316,22 +328,73 @@ class OverlayService : Service(), TextToSpeech.OnInitListener {
       WindowManager.LayoutParams.TYPE_PHONE
     }
     val params = WindowManager.LayoutParams(
-      if (minimized) ViewGroup.LayoutParams.WRAP_CONTENT else ViewGroup.LayoutParams.MATCH_PARENT,
+      ViewGroup.LayoutParams.WRAP_CONTENT,
       ViewGroup.LayoutParams.WRAP_CONTENT,
       type,
       // Não rouba o teclado do app que está embaixo.
       WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
       PixelFormat.TRANSLUCENT
     )
-    if (minimized) {
-      params.gravity = Gravity.TOP or Gravity.START
-      params.x = bubbleX
-      params.y = bubbleY
-    } else {
-      params.gravity = (if (atTop) Gravity.TOP else Gravity.BOTTOM) or Gravity.CENTER_HORIZONTAL
-      params.y = if (atTop) dp(36) else dp(24)
-    }
+    params.gravity = Gravity.TOP or Gravity.START
+    params.x = if (minimized) bubbleX else cardX
+    params.y = if (minimized) bubbleY else cardY
     return params
+  }
+
+  /** Move a janela atual sem deixar que ela saia da tela, e lembra a posição. */
+  private fun moveWindow(x: Int, y: Int) {
+    val view = currentView ?: return
+    val p = view.layoutParams as? WindowManager.LayoutParams ?: return
+    val metrics = resources.displayMetrics
+    p.x = x.coerceIn(0, (metrics.widthPixels - view.width).coerceAtLeast(0))
+    p.y = y.coerceIn(0, (metrics.heightPixels - view.height).coerceAtLeast(0))
+    if (minimized) {
+      bubbleX = p.x; bubbleY = p.y
+    } else {
+      cardX = p.x; cardY = p.y
+    }
+    try {
+      windowManager.updateViewLayout(view, p)
+    } catch (_: Exception) {
+    }
+  }
+
+  /**
+   * Deixa a área arrastável com o dedo. Um toque sem arrastar chama [onTap].
+   * Os botões dentro da área continuam funcionando normalmente.
+   */
+  @SuppressLint("ClickableViewAccessibility")
+  private fun makeDraggable(area: View, onTap: (() -> Unit)? = null) {
+    var startX = 0
+    var startY = 0
+    var touchX = 0f
+    var touchY = 0f
+    var moved = false
+    area.setOnTouchListener { _, event ->
+      when (event.actionMasked) {
+        MotionEvent.ACTION_DOWN -> {
+          val p = currentView?.layoutParams as? WindowManager.LayoutParams
+            ?: return@setOnTouchListener false
+          startX = p.x; startY = p.y
+          touchX = event.rawX; touchY = event.rawY
+          moved = false
+          true
+        }
+        MotionEvent.ACTION_MOVE -> {
+          val dx = event.rawX - touchX
+          val dy = event.rawY - touchY
+          if (abs(dx) > dp(8) || abs(dy) > dp(8)) moved = true
+          if (moved) moveWindow(startX + dx.roundToInt(), startY + dy.roundToInt())
+          true
+        }
+        MotionEvent.ACTION_UP -> {
+          if (!moved) onTap?.invoke()
+          true
+        }
+        MotionEvent.ACTION_CANCEL -> true
+        else -> false
+      }
+    }
   }
 
   private fun buildStepCard(): View {
@@ -339,97 +402,100 @@ class OverlayService : Service(), TextToSpeech.OnInitListener {
     val isLast = index == steps.size - 1
     val card = cardContainer()
 
-    // Cabeçalho: "Passo 2 de 5" + Ocultar
+    // Cabeçalho compacto: alça + "Passo 2/5" + ouvir, ocultar e sair
     val header = row()
+    header.addView(label("⠿", 18f, cMuted).apply {
+      contentDescription = "Arraste para mudar a caixa de lugar"
+      setPadding(0, 0, dp(6), 0)
+    })
     header.addView(
-      label("Passo ${index + 1} de ${steps.size}", 15f, cMuted, bold = true),
+      label("Passo ${index + 1}/${steps.size}", 14f, cMuted, bold = true),
       LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
     )
-    header.addView(smallButton("— Ocultar") {
+    header.addView(iconButton("🔊", "Ouvir de novo") { speakCurrentStep(force = true) })
+    header.addView(iconButton("—", "Ocultar a caixa") {
       minimized = true
       render()
     })
+    header.addView(
+      iconButton(
+        if (exitArmed) "Sair?" else "✕",
+        if (exitArmed) "Toque de novo para sair" else "Sair do tutorial",
+        highlight = exitArmed
+      ) {
+        if (exitArmed) {
+          listener?.invoke("cancel", index, steps.size)
+          stopSelf()
+        } else {
+          exitArmed = true
+          render()
+          handler.postDelayed({
+            if (exitArmed) {
+              exitArmed = false
+              if (!minimized && !finished) render()
+            }
+          }, 3500)
+        }
+      }
+    )
     card.addView(header)
 
-    // Barra de progresso em segmentos
-    val progress = row().apply { setPadding(0, dp(10), 0, dp(14)) }
+    // Barra de progresso fina
+    val progress = row().apply { setPadding(0, dp(6), 0, dp(8)) }
     steps.indices.forEach { i ->
       val seg = View(this).apply {
-        background = rounded(if (i <= index) cPrimary else cBorder, null, dp(4).toFloat())
+        background = rounded(if (i <= index) cPrimary else cBorder, null, dp(2).toFloat())
       }
-      progress.addView(seg, LinearLayout.LayoutParams(0, dp(8), 1f).apply {
-        if (i > 0) marginStart = dp(4)
+      progress.addView(seg, LinearLayout.LayoutParams(0, dp(5), 1f).apply {
+        if (i > 0) marginStart = dp(3)
       })
     }
     card.addView(progress)
 
-    // Conteúdo rolável (caso o texto seja grande)
+    card.addView(label(step.title, 18f, cText, bold = true))
+
+    // Instrução e dica roláveis, caso o texto seja grande
     val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-    content.addView(label(step.title, 22f, cText, bold = true))
-    content.addView(label(step.instruction, 19f, cText).apply { setPadding(0, dp(8), 0, 0) })
+    content.addView(label(step.instruction, 16f, cText).apply { setPadding(0, dp(4), 0, 0) })
     step.tip?.let { tip ->
       content.addView(
-        label("💡 $tip", 17f, cText).apply {
-          background = rounded(cSurfaceAlt, null, dp(12).toFloat())
-          setPadding(dp(14), dp(12), dp(14), dp(12))
+        label("💡 $tip", 14f, cText).apply {
+          background = rounded(cSurfaceAlt, null, dp(10).toFloat())
+          setPadding(dp(10), dp(8), dp(10), dp(8))
         },
         LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-          topMargin = dp(12)
+          topMargin = dp(8)
         }
       )
     }
-    val scroll = MaxHeightScrollView(this, (resources.displayMetrics.heightPixels * 0.32f).roundToInt())
+    val scroll = MaxHeightScrollView(this, (resources.displayMetrics.heightPixels * 0.25f).roundToInt())
     scroll.addView(content)
     card.addView(scroll)
 
     // Botões principais
-    val main = row().apply { setPadding(0, dp(16), 0, 0) }
+    val main = row().apply { setPadding(0, dp(10), 0, 0) }
     main.addView(
-      bigButton("◀ Voltar", filled = false, enabled = index > 0) { goTo(index - 1) },
+      bigButton("◀", filled = false, enabled = index > 0, description = "Passo anterior") { goTo(index - 1) },
       LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
     )
     main.addView(
       bigButton(if (isLast) "✔ Concluir" else "Próximo ▶", filled = true) {
         if (isLast) complete() else goTo(index + 1)
       },
-      LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.3f).apply { marginStart = dp(10) }
+      LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 2.5f).apply { marginStart = dp(8) }
     )
     card.addView(main)
 
-    // Botões secundários
-    val extra = row().apply { setPadding(0, dp(10), 0, 0) }
-    extra.addView(smallButton("🔊 Ouvir") { speakCurrentStep(force = true) }, weighted())
-    extra.addView(smallButton(if (atTop) "⬇ Descer" else "⬆ Subir") {
-      atTop = !atTop
-      render()
-    }, weighted())
-    extra.addView(smallButton(if (exitArmed) "Toque de novo" else "✕ Sair") {
-      if (exitArmed) {
-        listener?.invoke("cancel", index, steps.size)
-        stopSelf()
-      } else {
-        exitArmed = true
-        render()
-        handler.postDelayed({
-          if (exitArmed) {
-            exitArmed = false
-            if (!minimized && !finished) render()
-          }
-        }, 3500)
-      }
-    }, weighted())
-    card.addView(extra)
-
+    makeDraggable(card)
     return wrap(card)
   }
 
   private fun buildFinishedCard(): View {
     val card = cardContainer()
-    card.addView(label("🎉", 44f, cText).apply { gravity = Gravity.CENTER })
-    card.addView(label("Parabéns!", 26f, cText, bold = true).apply { gravity = Gravity.CENTER })
-    card.addView(label("Você concluiu: $tutorialTitle", 19f, cText).apply {
+    card.addView(label("🎉 Parabéns!", 20f, cText, bold = true).apply { gravity = Gravity.CENTER })
+    card.addView(label("Você concluiu: $tutorialTitle", 15f, cText).apply {
       gravity = Gravity.CENTER
-      setPadding(0, dp(6), 0, dp(16))
+      setPadding(0, dp(4), 0, dp(12))
     })
     val buttons = row()
     buttons.addView(
@@ -437,19 +503,19 @@ class OverlayService : Service(), TextToSpeech.OnInitListener {
       LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
     )
     buttons.addView(
-      bigButton("Voltar ao Passo Certo", filled = true) { returnToApp() },
-      LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.6f).apply { marginStart = dp(10) }
+      bigButton("Voltar ao app", filled = true, description = "Voltar ao Passo Certo") { returnToApp() },
+      LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.6f).apply { marginStart = dp(8) }
     )
     card.addView(buttons)
+    makeDraggable(card)
     return wrap(card)
   }
 
-  @SuppressLint("ClickableViewAccessibility")
   private fun buildBubble(): View {
-    val size = dp(76)
+    val size = dp(64)
     val bubble = TextView(this).apply {
-      text = "${index + 1}/${steps.size}\nAbrir"
-      setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+      text = "${index + 1}/${steps.size}"
+      setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
       typeface = Typeface.DEFAULT_BOLD
       gravity = Gravity.CENTER
       setTextColor(cOnPrimary)
@@ -459,77 +525,41 @@ class OverlayService : Service(), TextToSpeech.OnInitListener {
         setStroke(dp(3), cFocus)
       }
       elevation = dp(8).toFloat()
-      contentDescription = "Abrir o tutorial do Passo Certo"
+      contentDescription = "Abrir o tutorial do Passo Certo. Arraste para mudar de lugar."
       setWidth(size)
       setHeight(size)
     }
-
-    var startX = 0
-    var startY = 0
-    var touchX = 0f
-    var touchY = 0f
-    var moved = false
-    bubble.setOnTouchListener { v, event ->
-      when (event.action) {
-        MotionEvent.ACTION_DOWN -> {
-          startX = bubbleX; startY = bubbleY
-          touchX = event.rawX; touchY = event.rawY
-          moved = false
-          true
-        }
-        MotionEvent.ACTION_MOVE -> {
-          val dx = event.rawX - touchX
-          val dy = event.rawY - touchY
-          if (abs(dx) > dp(8) || abs(dy) > dp(8)) moved = true
-          if (moved) {
-            bubbleX = startX + dx.roundToInt()
-            bubbleY = startY + dy.roundToInt()
-            (v.layoutParams as? WindowManager.LayoutParams)?.let { p ->
-              p.x = bubbleX; p.y = bubbleY
-              try {
-                windowManager.updateViewLayout(v, p)
-              } catch (_: Exception) {
-              }
-            }
-          }
-          true
-        }
-        MotionEvent.ACTION_UP -> {
-          if (!moved) {
-            minimized = false
-            render()
-          }
-          true
-        }
-        else -> false
-      }
+    makeDraggable(bubble) {
+      minimized = false
+      render()
     }
-    return bubble
+    return FrameLayout(this).apply {
+      setPadding(dp(4), dp(4), dp(4), dp(4))
+      addView(bubble)
+    }
   }
 
   // ---------------------------------------------------------------- componentes
 
   private fun cardContainer() = LinearLayout(this).apply {
     orientation = LinearLayout.VERTICAL
-    background = rounded(cBackground, cBorder, dp(22).toFloat(), dp(2))
-    setPadding(dp(20), dp(16), dp(20), dp(18))
-    elevation = dp(12).toFloat()
+    background = rounded(cBackground, cBorder, dp(18).toFloat(), dp(2))
+    setPadding(dp(14), dp(8), dp(14), dp(12))
+    elevation = dp(10).toFloat()
   }
 
-  /** Margem lateral em volta do cartão. */
+  /** Margem em volta do cartão (espaço para a sombra) com largura fixa. */
   private fun wrap(card: View) = FrameLayout(this).apply {
-    setPadding(dp(12), dp(4), dp(12), dp(4))
-    addView(card)
+    setPadding(dp(8), dp(8), dp(8), dp(8))
+    addView(card, FrameLayout.LayoutParams(cardWidth(), ViewGroup.LayoutParams.WRAP_CONTENT))
   }
+
+  /** Largura do cartão: a tela inteira menos as margens, até 400dp. */
+  private fun cardWidth(): Int = minOf(resources.displayMetrics.widthPixels - dp(16), dp(400))
 
   private fun row() = LinearLayout(this).apply {
     orientation = LinearLayout.HORIZONTAL
     gravity = Gravity.CENTER_VERTICAL
-  }
-
-  private fun weighted() = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-    marginStart = dp(4)
-    marginEnd = dp(4)
   }
 
   private fun label(text: String, sizeSp: Float, color: Int, bold: Boolean = false) = TextView(this).apply {
@@ -537,37 +567,51 @@ class OverlayService : Service(), TextToSpeech.OnInitListener {
     setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp * scale)
     setTextColor(color)
     if (bold) typeface = Typeface.DEFAULT_BOLD
-    setLineSpacing(0f, 1.2f)
+    setLineSpacing(0f, 1.15f)
   }
 
-  private fun bigButton(text: String, filled: Boolean, enabled: Boolean = true, onClick: () -> Unit) =
-    TextView(this).apply {
-      this.text = text
-      setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f * scale)
-      typeface = Typeface.DEFAULT_BOLD
-      gravity = Gravity.CENTER
-      minHeight = dp(60)
-      setPadding(dp(10), dp(10), dp(10), dp(10))
-      setTextColor(if (filled) cOnPrimary else cPrimary)
-      background = rounded(if (filled) cPrimary else Color.TRANSPARENT, cPrimary, dp(16).toFloat(), dp(2))
-      alpha = if (enabled) 1f else 0.35f
-      isEnabled = enabled
-      contentDescription = text
-      setOnClickListener { if (enabled) onClick() }
-    }
-
-  private fun smallButton(text: String, onClick: () -> Unit) = TextView(this).apply {
+  private fun bigButton(
+    text: String,
+    filled: Boolean,
+    enabled: Boolean = true,
+    description: String = text,
+    onClick: () -> Unit
+  ) = TextView(this).apply {
     this.text = text
-    setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f * scale)
+    setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f * scale)
     typeface = Typeface.DEFAULT_BOLD
     gravity = Gravity.CENTER
-    minHeight = dp(48)
-    setPadding(dp(12), dp(6), dp(12), dp(6))
-    setTextColor(cText)
-    background = rounded(cSurfaceAlt, null, dp(12).toFloat())
-    contentDescription = text
-    setOnClickListener { onClick() }
+    maxLines = 1
+    minHeight = dp(50)
+    setPadding(dp(8), dp(6), dp(8), dp(6))
+    setTextColor(if (filled) cOnPrimary else cPrimary)
+    background = rounded(if (filled) cPrimary else Color.TRANSPARENT, cPrimary, dp(14).toFloat(), dp(2))
+    alpha = if (enabled) 1f else 0.35f
+    isEnabled = enabled
+    contentDescription = description
+    setOnClickListener { if (enabled) onClick() }
   }
+
+  /** Botão pequeno do cabeçalho (mantém 44dp de área de toque). */
+  private fun iconButton(text: String, description: String, highlight: Boolean = false, onClick: () -> Unit) =
+    TextView(this).apply {
+      this.text = text
+      setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f * scale)
+      typeface = Typeface.DEFAULT_BOLD
+      gravity = Gravity.CENTER
+      maxLines = 1
+      minWidth = dp(44)
+      minHeight = dp(44)
+      setPadding(dp(8), 0, dp(8), 0)
+      setTextColor(if (highlight) cOnPrimary else cText)
+      background = rounded(if (highlight) cPrimary else cSurfaceAlt, null, dp(12).toFloat())
+      contentDescription = description
+      setOnClickListener { onClick() }
+      layoutParams = LinearLayout.LayoutParams(
+        ViewGroup.LayoutParams.WRAP_CONTENT,
+        ViewGroup.LayoutParams.WRAP_CONTENT
+      ).apply { marginStart = dp(6) }
+    }
 
   private fun rounded(fill: Int, stroke: Int?, radius: Float, strokeWidth: Int = 0) = GradientDrawable().apply {
     setColor(fill)

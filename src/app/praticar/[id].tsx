@@ -43,7 +43,7 @@ export default function Practice() {
 
   if (!tutorial || !step) {
     return (
-      <Screen title="Praticar">
+      <Screen title="Praticar" home>
         <AppText>Tutorial não encontrado.</AppText>
       </Screen>
     );
@@ -81,6 +81,7 @@ export default function Practice() {
   return (
     <Screen
       title={tutorial.title}
+      home
       footer={
         <>
           <View style={{ flexDirection: 'row', gap: t.spacing(1.5) }}>

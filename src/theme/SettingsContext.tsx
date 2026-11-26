@@ -29,7 +29,8 @@ export interface Theme {
   dark: boolean;
   colors: Palette;
   /** Tamanhos de fonte já multiplicados pela escala escolhida. */
-  font: { small: number; body: number; large: number; title: number; hero: number };
+  /** `button` cresce menos que os outros para o texto caber nos botões. */
+  font: { small: number; body: number; large: number; title: number; hero: number; button: number };
   spacing: (n: number) => number;
   radius: number;
   /** Altura mínima de qualquer área de toque. */
@@ -80,6 +81,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         large: Math.round(23 * s),
         title: Math.round(28 * s),
         hero: Math.round(34 * s),
+        button: Math.round(18 * (1 + (s - 1) * 0.5)),
       },
       spacing: (n: number) => n * 8,
       radius: 18,

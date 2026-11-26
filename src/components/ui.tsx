@@ -67,6 +67,7 @@ export function Screen({
   title,
   back = true,
   right,
+  home,
   scroll = true,
   footer,
 }: {
@@ -74,6 +75,8 @@ export function Screen({
   title?: string;
   back?: boolean;
   right?: ReactNode;
+  /** Mostra o botão "Início", que volta direto para a tela inicial. */
+  home?: boolean;
   scroll?: boolean;
   footer?: ReactNode;
 }) {
@@ -87,7 +90,7 @@ export function Screen({
 
   return (
     <View style={{ flex: 1, backgroundColor: t.colors.background, paddingTop: insets.top }}>
-      {(title || back || right) && (
+      {(title || back || right || home) && (
         <View
           style={[
             styles.header,
@@ -99,12 +102,21 @@ export function Screen({
           ) : null}
           <View style={{ flex: 1 }}>
             {title ? (
-              <AppText variant="large" bold>
+              <AppText variant="large" bold style={{ flexShrink: 1 }}>
                 {title}
               </AppText>
             ) : null}
           </View>
           {right}
+          {home ? (
+            <Button
+              label="Início"
+              variant="ghost"
+              compact
+              accessibilityHint="Volta para a tela inicial"
+              onPress={() => router.dismissTo('/')}
+            />
+          ) : null}
         </View>
       )}
       {scroll ? (
@@ -196,13 +208,23 @@ export function Button({
       ]}
     >
       {icon ? (
-        <Text maxFontSizeMultiplier={1.3} style={{ fontSize: compact ? t.font.body : t.font.large }}>
+        <Text maxFontSizeMultiplier={1.2} style={{ fontSize: compact ? t.font.small : t.font.body }}>
           {icon}
         </Text>
       ) : null}
+      {/* Uma linha só: se não couber, a letra diminui um pouco em vez de quebrar. */}
       <Text
-        maxFontSizeMultiplier={1.3}
-        style={{ color: p.fg, fontSize: compact ? t.font.small : t.font.body, fontWeight: '700', textAlign: 'center' }}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.7}
+        maxFontSizeMultiplier={1.2}
+        style={{
+          flexShrink: 1,
+          color: p.fg,
+          fontSize: compact ? t.font.button - 2 : t.font.button,
+          fontWeight: '700',
+          textAlign: 'center',
+        }}
       >
         {label}
       </Text>

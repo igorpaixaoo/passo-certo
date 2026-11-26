@@ -9,7 +9,7 @@ export default function SettingsScreen() {
   const { settings, update, theme: t } = useSettings();
 
   return (
-    <Screen title="Ajustes">
+    <Screen title="Ajustes" home>
       {/* Prévia ao vivo */}
       <Card>
         <AppText variant="small" muted bold>

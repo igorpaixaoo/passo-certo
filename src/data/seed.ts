@@ -15,6 +15,15 @@ const APPS = {
   },
 };
 
+/**
+ * Versão dos tutoriais padrão. Aumente quando mudar a lista abaixo de um jeito
+ * que precise chegar a quem já tem o app instalado (ver `migrate` em TutorialsContext).
+ */
+export const SEED_VERSION = 2;
+
+/** Tutoriais padrão que foram substituídos e devem sair das listas já salvas. */
+export const RETIRED_SEED_IDS = ['pix', 'golpes'];
+
 /** Tutoriais que vêm com o aplicativo. O administrador pode editar ou excluir. */
 export const SEED_TUTORIALS: Tutorial[] = [
   {
@@ -230,92 +239,50 @@ export const SEED_TUTORIALS: Tutorial[] = [
     ],
   },
   {
-    id: 'pix',
-    title: 'Fazer um Pix com segurança',
-    description: 'Envie dinheiro pelo aplicativo do seu banco, conferindo tudo antes.',
-    emoji: '💸',
-    category: 'Banco',
+    id: 'pix-seguro',
+    title: 'Pix com segurança e golpes',
+    description: 'Assista ao vídeo e aprenda a fazer um Pix sem cair em golpes.',
+    emoji: '🛡️',
+    category: 'Segurança',
     difficulty: 'dificil',
+    video: 'pix_com_seguranca',
     createdAt: NOW,
     updatedAt: NOW,
     steps: [
       {
-        id: 'p1',
-        title: 'Abra o app do seu banco',
-        instruction: 'Volte para a tela inicial e toque no aplicativo do seu banco. Depois toque em "Próximo" aqui.',
-        tip: 'Nunca faça um Pix porque alguém pediu por mensagem ou ligação com pressa. Desconfie!',
+        id: 'ps1',
+        title: 'Desconfie da pressa',
+        instruction: 'Golpistas dizem que é urgente: "pague agora", "sua conta será bloqueada". Nunca faça um Pix com pressa.',
       },
       {
-        id: 'p2',
-        title: 'Entre na sua conta',
-        instruction: 'Digite sua senha do aplicativo. Ninguém do banco pede essa senha por telefone.',
+        id: 'ps2',
+        title: '"Mãe, troquei de número"',
+        instruction: 'Se um parente diz que trocou de número e pede dinheiro, ligue para o número ANTIGO dele para confirmar.',
       },
       {
-        id: 'p3',
-        title: 'Encontre o Pix',
-        instruction: 'Procure um botão escrito "Pix" ou o símbolo de um losango. Toque nele.',
+        id: 'ps3',
+        title: 'Senhas e códigos são só seus',
+        instruction: 'O banco nunca pede sua senha por telefone. E nunca envie um código que chegou por SMS.',
+        tip: 'Com o código do SMS, golpistas roubam o seu WhatsApp.',
       },
       {
-        id: 'p4',
-        title: 'Escolha "Pagar" ou "Transferir"',
-        instruction: 'Toque em "Transferir" ou "Pagar com chave".',
+        id: 'ps4',
+        title: 'Não toque em links estranhos',
+        instruction: 'Não toque em links de prêmios, promoções ou "atualize seus dados".',
       },
       {
-        id: 'p5',
-        title: 'Digite a chave Pix',
-        instruction: 'A chave pode ser CPF, telefone, e-mail ou um código. Digite com atenção.',
+        id: 'ps5',
+        title: 'Confira o valor',
+        instruction: 'Veja se a vírgula está no lugar certo: R$ 50,00 e não R$ 5.000,00.',
       },
       {
-        id: 'p6',
-        title: 'Coloque o valor',
-        instruction: 'Digite o valor. Confira se a vírgula está no lugar certo (R$ 50,00 e não R$ 5.000,00).',
-      },
-      {
-        id: 'p7',
+        id: 'ps6',
         title: 'CONFIRA O NOME',
         instruction: 'Antes de confirmar, leia o nome de quem vai receber. É mesmo a pessoa certa?',
         tip: 'Se o nome for diferente do esperado, NÃO continue. Pergunte para alguém de confiança.',
       },
       {
-        id: 'p8',
-        title: 'Confirme',
-        instruction: 'Se estiver tudo certo, toque em "Confirmar" e digite a senha. Guarde o comprovante.',
-      },
-    ],
-  },
-  {
-    id: 'golpes',
-    title: 'Reconhecer mensagens de golpe',
-    description: 'Aprenda os sinais de uma mensagem falsa antes de responder.',
-    emoji: '🛡️',
-    category: 'Segurança',
-    difficulty: 'dificil',
-    targetApp: APPS.whatsapp,
-    createdAt: NOW,
-    updatedAt: NOW,
-    steps: [
-      {
-        id: 'g1',
-        title: 'Desconfie da pressa',
-        instruction: 'Golpistas sempre dizem que é urgente: "pague agora", "sua conta será bloqueada".',
-      },
-      {
-        id: 'g2',
-        title: '"Mãe, troquei de número"',
-        instruction: 'Se um parente diz que trocou de número e pede dinheiro, ligue para o número ANTIGO dele para confirmar.',
-      },
-      {
-        id: 'g3',
-        title: 'Não toque em links estranhos',
-        instruction: 'Não toque em links de prêmios, promoções ou "atualize seus dados".',
-      },
-      {
-        id: 'g4',
-        title: 'Nunca passe códigos',
-        instruction: 'Se pedirem um código que chegou por SMS, NÃO envie. Com ele, roubam o seu WhatsApp.',
-      },
-      {
-        id: 'g5',
+        id: 'ps7',
         title: 'Na dúvida, pare',
         instruction: 'Não responda. Mostre a mensagem para alguém de confiança antes de fazer qualquer coisa.',
       },

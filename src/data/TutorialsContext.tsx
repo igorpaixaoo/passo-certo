@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { SEED_TUTORIALS } from './seed';
+import { RETIRED_SEED_IDS, SEED_TUTORIALS, SEED_VERSION } from './seed';
 import type { Tutorial } from './types';
 
 /**
@@ -12,8 +12,20 @@ import type { Tutorial } from './types';
  * à API (ver src/services/api.ts) mantendo a mesma interface do contexto.
  */
 const STORAGE_KEY = 'passo-certo:tutorials';
+const VERSION_KEY = 'passo-certo:seed-version';
 
 export type TutorialInput = Omit<Tutorial, 'id' | 'createdAt' | 'updatedAt'>;
+
+/**
+ * Atualiza uma lista salva por uma versão anterior do app: remove os tutoriais
+ * padrão aposentados e acrescenta os padrões novos, sem mexer no que o
+ * administrador criou ou editou.
+ */
+function migrate(list: Tutorial[]): Tutorial[] {
+  const kept = list.filter((t) => !RETIRED_SEED_IDS.includes(t.id));
+  const ids = new Set(kept.map((t) => t.id));
+  return [...kept, ...SEED_TUTORIALS.filter((t) => !ids.has(t.id))];
+}
 
 interface TutorialsContextValue {
   tutorials: Tutorial[];
@@ -28,17 +40,26 @@ interface TutorialsContextValue {
 const TutorialsContext = createContext<TutorialsContextValue | null>(null);
 
 async function load(): Promise<Tutorial[]> {
-  const raw = await AsyncStorage.getItem(STORAGE_KEY);
+  const [raw, version] = await Promise.all([AsyncStorage.getItem(STORAGE_KEY), AsyncStorage.getItem(VERSION_KEY)]);
   if (!raw) return SEED_TUTORIALS;
+  let list: Tutorial[];
   try {
-    return JSON.parse(raw) as Tutorial[];
+    list = JSON.parse(raw) as Tutorial[];
   } catch {
     return SEED_TUTORIALS;
   }
+  if (Number(version ?? 1) < SEED_VERSION) {
+    list = migrate(list);
+    await persist(list);
+  }
+  return list;
 }
 
 function persist(list: Tutorial[]) {
-  return AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  return AsyncStorage.multiSet([
+    [STORAGE_KEY, JSON.stringify(list)],
+    [VERSION_KEY, String(SEED_VERSION)],
+  ]);
 }
 
 export function TutorialsProvider({ children }: { children: ReactNode }) {

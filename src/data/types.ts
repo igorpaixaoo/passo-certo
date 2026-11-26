@@ -34,6 +34,11 @@ export interface Tutorial {
   category: string;
   difficulty: Difficulty;
   targetApp?: TargetApp;
+  /**
+   * Vídeo explicativo (chave de src/data/videos.ts). Quando existe, o tutorial
+   * mostra o vídeo em vez da ajuda flutuante por cima de outros apps.
+   */
+  video?: string;
   steps: TutorialStep[];
   createdAt: string;
   updatedAt: string;

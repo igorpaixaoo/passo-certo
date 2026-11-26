@@ -3,8 +3,10 @@ import { useEffect, useState } from 'react';
 import { AppState, Text, View } from 'react-native';
 
 import { Overlay } from '../../../modules/passo-certo-overlay';
+import { TutorialVideo } from '../../components/TutorialVideo';
 import { AppText, Button, Card, DifficultyBadge, Screen } from '../../components/ui';
 import { useTutorials } from '../../data/TutorialsContext';
+import { getVideo } from '../../data/videos';
 import { isTargetAppInstalled, startOverlayTutorial } from '../../services/guide';
 import { useSettings } from '../../theme/SettingsContext';
 
@@ -28,13 +30,16 @@ export default function TutorialDetail() {
 
   if (!tutorial) {
     return (
-      <Screen title="Tutorial">
+      <Screen title="Tutorial" home>
         <AppText>Este tutorial não foi encontrado.</AppText>
-        <Button label="Voltar ao início" onPress={() => router.replace('/')} />
+        <Button label="Voltar ao início" onPress={() => router.dismissTo('/')} />
       </Screen>
     );
   }
 
+  const video = getVideo(tutorial.video);
+  // Tutoriais com vídeo não usam a ajuda flutuante por cima de outros apps.
+  const canGuide = Overlay.isAvailable && !video;
   const installed = isTargetAppInstalled(tutorial);
 
   const startGuided = () => {
@@ -48,38 +53,41 @@ export default function TutorialDetail() {
   return (
     <Screen
       title="Tutorial"
+      home
       footer={
         <>
-          {Overlay.isAvailable ? (
+          {canGuide ? (
             <Button
               icon="▶"
-              label="Começar com ajuda na tela"
+              label="Começar com ajuda"
               accessibilityHint="Abre o aplicativo e mostra as instruções por cima dele"
               onPress={startGuided}
             />
           ) : null}
           <Button
             icon="📖"
-            label="Ver os passos aqui"
-            variant={Overlay.isAvailable ? 'secondary' : 'primary'}
+            label={video ? 'Rever as dicas' : 'Ver os passos aqui'}
+            variant={canGuide ? 'secondary' : 'primary'}
             onPress={() => router.push(`/praticar/${tutorial.id}`)}
           />
         </>
       }
     >
       <View style={{ alignItems: 'center', gap: t.spacing(1.5), paddingVertical: t.spacing(1) }}>
-        <View
-          style={{
-            width: 104,
-            height: 104,
-            borderRadius: 28,
-            backgroundColor: t.colors.surfaceAlt,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Text style={{ fontSize: 56 }}>{tutorial.emoji}</Text>
-        </View>
+        {video ? null : (
+          <View
+            style={{
+              width: 104,
+              height: 104,
+              borderRadius: 28,
+              backgroundColor: t.colors.surfaceAlt,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Text style={{ fontSize: 56 }}>{tutorial.emoji}</Text>
+          </View>
+        )}
         <AppText variant="hero" center>
           {tutorial.title}
         </AppText>
@@ -89,7 +97,16 @@ export default function TutorialDetail() {
         </AppText>
       </View>
 
-      {tutorial.targetApp ? (
+      {video ? (
+        <View style={{ gap: t.spacing(1) }}>
+          <TutorialVideo source={video} />
+          <AppText variant="small" muted center>
+            Toque no vídeo para pausar. Use o botão de tela cheia para ver maior.
+          </AppText>
+        </View>
+      ) : null}
+
+      {tutorial.targetApp && canGuide ? (
         <Card>
           <AppText bold>Você vai usar: {tutorial.targetApp.name}</AppText>
           {installed === false ? (
@@ -123,11 +140,11 @@ export default function TutorialDetail() {
           <AppText variant="large" bold>
             ✓ Tudo pronto!
           </AppText>
-          <AppText>Agora toque em “Começar com ajuda na tela”.</AppText>
+          <AppText>Agora toque em “Começar com ajuda”.</AppText>
         </Card>
       ) : null}
 
-      <AppText variant="title">{tutorial.steps.length} passos</AppText>
+      <AppText variant="title">{video ? 'O que lembrar' : `${tutorial.steps.length} passos`}</AppText>
       {tutorial.steps.map((step, i) => (
         <View key={step.id} style={{ flexDirection: 'row', gap: t.spacing(1.5), alignItems: 'flex-start' }}>
           <View

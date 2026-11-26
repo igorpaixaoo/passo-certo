@@ -44,7 +44,7 @@ export default function Home() {
           <AppText variant="title">Passo Certo</AppText>
         </View>
         <Button
-          label="Ajustes ⚙️"
+          label="⚙️"
           variant="ghost"
           compact
           accessibilityHint="Mudar tamanho da letra, cores e voz"
